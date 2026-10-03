@@ -1,0 +1,7 @@
+# Machine-specific hardware scan (disk UUIDs, kernel modules). Regenerate per host.
+hardware-configuration.nix
+
+# Build artifacts
+result
+result-*
+.direnv/
