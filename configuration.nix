@@ -2,7 +2,25 @@
 # your system. Help is available in the configuration.nix(5) man page, on
 # https://search.nixos.org/options and in the NixOS manual (`nixos-help`).
 
-{ config, pkgs, ... }:
+{ config, pkgs, lib, ... }:
+
+let
+  # ASUS TUF A15 support — only on ASUS hardware. The asus-nb-wmi platform
+  # device exists on this laptop and is absent on other machines, so the
+  # services below never activate on the other laptop.
+  isAsusLaptop = builtins.pathExists "/sys/devices/platform/asus-nb-wmi";
+
+  # vesktop (Electron) picks XWayland, which Hyprland upscales under the 1.5
+  # fractional scale, so it looks blurry/pixelated. Force native Wayland.
+  vesktopWayland = pkgs.symlinkJoin {
+    name = "vesktop";
+    paths = [ pkgs.vesktop ];
+    nativeBuildInputs = [ pkgs.makeWrapper ];
+    postBuild = ''
+      wrapProgram $out/bin/vesktop --add-flags "--ozone-platform=wayland"
+    '';
+  };
+in
 
 {
   imports =
@@ -14,6 +32,15 @@
   # Use the systemd-boot EFI boot loader.
   boot.loader.systemd-boot.enable = true;
   boot.loader.efi.canTouchEfiVariables = true;
+  # Keep the boot menu small: only the 10 most recent generations.
+  boot.loader.systemd-boot.configurationLimit = 10;
+
+  # Automatic store cleanup so old generations don't pile up.
+  nix.gc = {
+    automatic = true;
+    dates = "weekly";
+    options = "--delete-older-than 14d";
+  };
 
   # Use latest kernel.
   boot.kernelPackages = pkgs.linuxPackages_latest;
@@ -57,6 +84,36 @@
 
   # Enable hardware-accelerated graphics (required for Hyprland).
   hardware.graphics.enable = true;
+
+  # ASUS TUF A15: asusd powers the fan/power profiles and the Aura RGB
+  # keyboard; rog-control-center is the GUI for them. Gated to ASUS hardware
+  # so other laptops are unaffected.
+  services.asusd.enable = lib.mkIf isAsusLaptop true;
+  programs.rog-control-center.enable = lib.mkIf isAsusLaptop true;
+  # The asusd NixOS module only links the unit and the shipped unit has no
+  # [Install] section, so asusd never starts. Wire it up ourselves.
+  systemd.services.asusd.wantedBy = lib.mkIf isAsusLaptop [ "multi-user.target" ];
+  # asusd's unit sandboxes with ReadWritePaths=/etc/asusd/, and fails to start
+  # (226/NAMESPACE) if that directory doesn't exist. Create it.
+  systemd.tmpfiles.rules = lib.mkIf isAsusLaptop [ "d /etc/asusd 0755 root root -" ];
+
+  # Default keyboard RGB: rainbow cycle, (re)applied whenever asusd is up.
+  # asusd also persists this to /etc/asusd/aura_<id>.ron.
+  systemd.services.asusd-aura = lib.mkIf isAsusLaptop {
+    description = "Set default ASUS keyboard Aura effect (rainbow cycle)";
+    after = [ "asusd.service" ];
+    requires = [ "asusd.service" ];
+    wantedBy = [ "multi-user.target" ];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+      ExecStart = "${pkgs.asusctl}/bin/asusctl aura effect rainbow-cycle --speed med";
+    };
+  };
+
+  # OpenRGB: udev rules for non-root device access, plus the i2c kernel modules.
+  services.udev.packages = [ pkgs.openrgb ];
+  boot.kernelModules = [ "i2c-dev" "i2c-piix4" ];
 
   # Enable Hyprland, a dynamic tiling Wayland compositor.
   programs.hyprland = {
@@ -181,12 +238,15 @@
      tmux
      bluetui
      prismlauncher
-     vesktop
+     vesktopWayland
      blueman
      termusic
      steam
      yt-dlp
+     openrgb
      gh
+     fastfetch
+     btop
    ];
 
   # Some programs need SUID wrappers, can be configured further or are

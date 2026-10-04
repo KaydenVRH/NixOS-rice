@@ -15,6 +15,26 @@ let
   gtkTheme    = "catppuccin-mocha-mauve-standard";
   rounding    = 6; # window + quickshell bar corner radius (kept in sync)
 
+  # Hardware gate: true only on ASUS laptops (this TUF A15). The platform
+  # device below is absent on non-ASUS machines, so anything guarded by this
+  # flag is inert on other laptops.
+  isAsusLaptop = builtins.pathExists "/sys/devices/platform/asus-nb-wmi";
+
+  # Per-device pointer tweak for this laptop's ELAN touchpad (too fast by
+  # default). Only emitted on ASUS hardware.
+  touchpadLua = lib.optionalString isAsusLaptop ''
+    hl.device({
+      name          = "elan1203:00-04f3:307a-touchpad",
+      sensitivity   = -0.4,
+      accel_profile = "flat",
+    })
+    hl.device({
+      name          = "elan1203:00-04f3:307a-mouse",
+      sensitivity   = -0.4,
+      accel_profile = "flat",
+    })
+  '';
+
   catppuccinGtk = pkgs.catppuccin-gtk.override {
     variant = "mocha";
     accents = [ "mauve" ];
@@ -327,10 +347,15 @@ let
 
       input = {
         kb_layout      = "us",
+        repeat_rate    = 40,     -- keys/second (default 25)
+        repeat_delay   = 400,    -- ms before repeat kicks in (default 600)
         follow_mouse   = 1,
-        sensitivity    = -0.3,   -- a bit slower than default
+        -- force_no_accel makes Hyprland use libinput's *unaccelerated* delta,
+        -- which bypasses `sensitivity` entirely. Keep it off so sensitivity
+        -- (global + the per-device touchpad override) actually applies.
+        sensitivity    = 0,
         accel_profile  = "flat",  -- disable pointer acceleration
-        force_no_accel = true,
+        force_no_accel = false,
         touchpad       = { natural_scroll = false },
       },
 
@@ -342,6 +367,9 @@ let
         use_cpu_buffer      = true,
       },
     })
+
+    -- Per-device (touchpad) pointer speed ---------------------------
+${touchpadLua}
 
     -- Curves -------------------------------------------------------
     hl.curve("easeOutQuint",   { type = "bezier", points = { {0.23, 1},    {0.32, 1} } })
@@ -358,26 +386,26 @@ let
     -- Springs ------------------------------------------------------
     hl.curve("easy",   { type = "spring", mass = 1, stiffness = 71.2633, dampening = 15.8273644 })
     hl.curve("snappy", { type = "spring", mass = 1, stiffness = 120,     dampening = 18 })
-    hl.curve("bouncy", { type = "spring", mass = 1, stiffness = 200,     dampening = 14 })
+    hl.curve("bouncy", { type = "spring", mass = 1, stiffness = 230,     dampening = 14 })
 
-    -- Animations ---------------------------------------------------
-    hl.animation({ leaf = "global",        enabled = true, speed = 10,   bezier = "default" })
-    hl.animation({ leaf = "border",        enabled = true, speed = 6.0,  bezier = "md3_decel" })
-    hl.animation({ leaf = "windows",       enabled = true, speed = 4.5,  spring = "snappy" })
-    hl.animation({ leaf = "windowsIn",     enabled = true, speed = 3.2,  bezier = "overshot",   style = "popin 80%" })
-    hl.animation({ leaf = "windowsOut",    enabled = true, speed = 2.2,  bezier = "menu_accel", style = "popin 80%" })
+    -- Animations (relaxed pace, still springy) ----------------------
+    hl.animation({ leaf = "global",        enabled = true, speed = 9,    bezier = "default" })
+    hl.animation({ leaf = "border",        enabled = true, speed = 5.0,  bezier = "md3_decel" })
+    hl.animation({ leaf = "windows",       enabled = true, speed = 4.0,  spring = "bouncy" })
+    hl.animation({ leaf = "windowsIn",     enabled = true, speed = 4.0,  bezier = "overshot",   style = "popin 85%" })
+    hl.animation({ leaf = "windowsOut",    enabled = true, speed = 2.2,  bezier = "menu_accel", style = "popin 85%" })
     hl.animation({ leaf = "fadeIn",        enabled = false })
     hl.animation({ leaf = "fadeOut",       enabled = false })
     hl.animation({ leaf = "fade",          enabled = false })
-    hl.animation({ leaf = "layers",        enabled = true, speed = 3.81, bezier = "easeOutQuint" })
-    hl.animation({ leaf = "layersIn",      enabled = true, speed = 4,    bezier = "menu_decel", style = "slide" })
-    hl.animation({ leaf = "layersOut",     enabled = true, speed = 1.6,  bezier = "menu_accel", style = "slide" })
+    hl.animation({ leaf = "layers",        enabled = true, speed = 3.5,  bezier = "easeOutQuint" })
+    hl.animation({ leaf = "layersIn",      enabled = true, speed = 4.0,  bezier = "menu_decel", style = "slide" })
+    hl.animation({ leaf = "layersOut",     enabled = true, speed = 1.8,  bezier = "menu_accel", style = "slide" })
     hl.animation({ leaf = "fadeLayersIn",  enabled = false })
     hl.animation({ leaf = "fadeLayersOut", enabled = false })
-    hl.animation({ leaf = "workspaces",    enabled = true, speed = 3.0,  bezier = "md3_decel",  style = "slide" })
-    hl.animation({ leaf = "workspacesIn",  enabled = true, speed = 3.0,  bezier = "menu_decel", style = "slide" })
+    hl.animation({ leaf = "workspaces",    enabled = true, speed = 4.0,  bezier = "overshot",   style = "slide" })
+    hl.animation({ leaf = "workspacesIn",  enabled = true, speed = 4.0,  bezier = "overshot",   style = "slide" })
     hl.animation({ leaf = "workspacesOut", enabled = true, speed = 3.0,  bezier = "menu_accel", style = "slide" })
-    hl.animation({ leaf = "zoomFactor",    enabled = true, speed = 7,    bezier = "quick" })
+    hl.animation({ leaf = "zoomFactor",    enabled = true, speed = 6,    bezier = "quick" })
 
     ----------------------------------------------------------------
     ---- KEYBINDINGS -----------------------------------------------
@@ -387,6 +415,7 @@ let
     hl.bind(mainMod .. " + E",      hl.dsp.exec_cmd(fileManager))
     hl.bind(mainMod .. " + D",      hl.dsp.exec_cmd(menu))
     hl.bind(mainMod .. " + B",      hl.dsp.exec_cmd(browser))
+    hl.bind(mainMod .. " + L",      hl.dsp.exec_cmd("hyprlock --config /etc/xdg/hypr/hyprlock.conf"))
     hl.bind(mainMod .. " + N",      hl.dsp.exec_cmd("quickshell -c rice ipc call notifications toggle"))
     hl.bind(mainMod .. " + space",  hl.dsp.exec_cmd("quickshell -c rice ipc call launcher toggle"))
     hl.bind(mainMod .. " + SHIFT + M", hl.dsp.exec_cmd("quickshell -c rice ipc call music toggle"))
@@ -781,6 +810,123 @@ let
   '';
 
   # ===========================================================================
+  #  Hyprlock (screen locker) — Catppuccin Mocha, mauve/blue accent
+  # ===========================================================================
+  hyprlockConf = ''
+    $font = JetBrainsMono Nerd Font
+
+    general {
+      hide_cursor = true
+    }
+
+    animations {
+      enabled = true
+      bezier = easeOutQuint, 0.23, 1, 0.32, 1
+      bezier = easeInOutCubic, 0.65, 0.05, 0.36, 1
+      bezier = linear, 0, 0, 1, 1
+
+      animation = fadeIn, 1, 5, easeOutQuint
+      animation = fadeOut, 1, 5, easeOutQuint
+      animation = inputFieldDots, 1, 2, linear
+      animation = inputFieldColors, 1, 4, easeOutQuint
+      animation = inputFieldWidth, 1, 4, easeOutQuint
+      animation = inputFieldFade, 1, 4, easeOutQuint
+    }
+
+    background {
+      monitor =
+      path = /etc/xdg/hypr/wallpaper.png
+      color = rgba(17, 17, 27, 1.0)
+      blur_passes = 3
+      blur_size = 7
+      noise = 0.02
+      contrast = 1.05
+      brightness = 0.55
+      vibrancy = 0.2
+      vibrancy_darkness = 0.2
+    }
+
+    # Clock
+    label {
+      monitor =
+      text = $TIME
+      color = rgba(205, 214, 244, 1.0)
+      font_size = 96
+      font_family = $font
+      position = 0, 175
+      halign = center
+      valign = center
+      shadow_passes = 2
+      shadow_size = 6
+      shadow_color = rgba(0, 0, 0, 0.45)
+    }
+
+    # Date
+    label {
+      monitor =
+      text = cmd[update:60000] date +"%A, %d %B"
+      color = rgba(203, 166, 247, 1.0)
+      font_size = 20
+      font_family = $font
+      position = 0, 105
+      halign = center
+      valign = center
+    }
+
+    # Card behind the password field
+    shape {
+      monitor =
+      size = 380, 78
+      color = rgba(24, 24, 37, 0.55)
+      rounding = 16
+      border_size = 1
+      border_color = rgba(69, 71, 90, 0.85)
+      position = 0, -92
+      halign = center
+      valign = center
+    }
+
+    # Greeting
+    label {
+      monitor =
+      text = 󰌾  Hello, $USER
+      color = rgba(166, 173, 200, 1.0)
+      font_size = 15
+      font_family = $font
+      position = 0, -150
+      halign = center
+      valign = center
+    }
+
+    # Password input
+    input-field {
+      monitor =
+      size = 340, 54
+      outline_thickness = 2
+      rounding = 14
+      dots_size = 0.25
+      dots_spacing = 0.35
+      dots_center = true
+      dots_rounding = -1
+
+      outer_color = rgba(203, 166, 247, 1.0) rgba(137, 180, 250, 1.0) 45deg
+      inner_color = rgba(49, 50, 68, 0.92)
+      font_color = rgba(205, 214, 244, 1.0)
+      check_color = rgba(137, 220, 235, 1.0)
+      fail_color = rgba(243, 139, 168, 1.0)
+      capslock_color = rgba(249, 226, 175, 1.0)
+
+      fade_on_empty = false
+      placeholder_text = Enter password…
+      fail_text = Wrong password
+
+      position = 0, -92
+      halign = center
+      valign = center
+    }
+  '';
+
+  # ===========================================================================
   #  Rofi (app launcher)
   # ===========================================================================
   rofiConfig = ''
@@ -977,6 +1123,9 @@ let
   # ===========================================================================
   # ===========================================================================
   #  Quickshell bar + launcher + system menu (QML)
+  # ===========================================================================
+  # ===========================================================================
+  #  Quickshell bar + launcher + system menu + music (QML)
   # ===========================================================================
   # ===========================================================================
   #  Quickshell bar + launcher + system menu + music (QML)
@@ -2117,7 +2266,7 @@ let
     
                                 Repeater {
                                     model: [
-                                        { label: "Lock",     icon: "󰌾", act: () => Quickshell.execDetached([ "hyprlock" ]) },
+                                        { label: "Lock",     icon: "󰌾", act: () => Quickshell.execDetached([ "hyprlock", "--config", "/etc/xdg/hypr/hyprlock.conf" ]) },
                                         { label: "Logout",   icon: "󰍃", act: () => Hyprland.dispatch("exit") },
                                         { label: "Suspend",  icon: "󰒲", act: () => Quickshell.execDetached([ "systemctl", "suspend" ]) },
                                         { label: "Reboot",   icon: "󰜉", act: () => Quickshell.execDetached([ "systemctl", "reboot" ]) },
@@ -2539,6 +2688,7 @@ let
         }
     }
   '';
+
 
 
 
@@ -3507,6 +3657,7 @@ in
   # ---------------------------------------------------------------------------
   environment.etc = {
     "xdg/hypr/hyprland.lua".text = hyprlandLua;
+    "xdg/hypr/hyprlock.conf".text = hyprlockConf;
     "xdg/hypr/wallpaper.png".source = wallpaperPng;
 
     "xdg/quickshell/rice/shell.qml".text = quickshellQml;
