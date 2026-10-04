@@ -20,6 +20,30 @@ let
       wrapProgram $out/bin/vesktop --add-flags "--ozone-platform=wayland"
     '';
   };
+
+  # opencode v2 — nixpkgs only ships 1.x. The v2 CLI is a Bun single-file
+  # binary that re-execs itself for its background server, and patchelf
+  # corrupts Bun's appended payload, so run it unpatched via nix-ld (enabled
+  # below). Bump version + hash to update:
+  #   nix store prefetch-file https://opencode.ai/files/bin/<version>/opencode-linux-x64.tar.gz
+  opencode-v2 = pkgs.stdenvNoCC.mkDerivation rec {
+    pname = "opencode";
+    version = "2.0.22";
+    src = pkgs.fetchurl {
+      url = "https://opencode.ai/files/bin/${version}/opencode-linux-x64.tar.gz";
+      hash = "sha256-kavIMrNvYZri5MIaM8mIe7yGHpXBSSADq3lw6UhNHvE=";
+    };
+    nativeBuildInputs = [ pkgs.makeWrapper ];
+    sourceRoot = ".";
+    dontConfigure = true;
+    dontBuild = true;
+    dontFixup = true;
+    installPhase = ''
+      install -Dm755 opencode $out/libexec/opencode
+      makeWrapper $out/libexec/opencode $out/bin/opencode \
+        --set OPENCODE_DISABLE_AUTOUPDATE true
+    '';
+  };
 in
 
 {
@@ -84,6 +108,10 @@ in
 
   # Enable hardware-accelerated graphics (required for Hyprland).
   hardware.graphics.enable = true;
+
+  # Run prebuilt dynamically-linked binaries (e.g. the opencode v2 CLI)
+  # unpatched, via nix-ld. Needed because patchelf corrupts Bun's payload.
+  programs.nix-ld.enable = true;
 
   # ASUS TUF A15: asusd powers the fan/power profiles and the Aura RGB
   # keyboard; rog-control-center is the GUI for them. Gated to ASUS hardware
@@ -227,6 +255,10 @@ in
   # Allow unfree packages
   nixpkgs.config.allowUnfree = true;
 
+  # Enable the modern nix CLI (`nix search`, `nix run`, flakes, ...) without
+  # passing --extra-experimental-features every time.
+  nix.settings.experimental-features = [ "nix-command" "flakes" ];
+
   # List packages installed in system profile.
   # You can use https://search.nixos.org/ to find more packages (and options).
    environment.systemPackages = with pkgs; [
@@ -234,7 +266,7 @@ in
      wget
      neovim
      htop
-     opencode
+     opencode-v2
      tmux
      bluetui
      prismlauncher
