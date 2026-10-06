@@ -1,0 +1,5 @@
+# Machine-specific Apple Wi-Fi blobs — keep local, do not commit.
+*.txt
+*.clm_blob
+*.txcap_blob
+*.bin

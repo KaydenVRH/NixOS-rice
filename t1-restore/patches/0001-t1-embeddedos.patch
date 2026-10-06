@@ -1,0 +1,313 @@
+diff --git a/src/idevicerestore.c b/src/idevicerestore.c
+index 04070a1..83d81d9 100644
+--- a/src/idevicerestore.c
++++ b/src/idevicerestore.c
+@@ -1117,8 +1117,10 @@ int idevicerestore_start(struct idevicerestore_client_t* client)
+ 	}
+ 	logger(LL_INFO, "All required components found in IPSW\n");
+ 
+-	/* Get OS (filesystem) name from build identity */
++	/* Get OS (filesystem) name from build identity.
++	 * T1 iBridge EmbeddedOS has no host system image, so skip it entirely. */
+ 	char* os_path = NULL;
++	if (!getenv("IDEVICERESTORE_T1_EMBEDDEDOS")) {
+ 	if (build_identity_get_component_path(build_identity, "OS", &os_path) < 0) {
+ 		logger(LL_ERROR, "Unable to get path for filesystem component\n");
+ 		return -1;
+@@ -1182,9 +1184,9 @@ int idevicerestore_start(struct idevicerestore_client_t* client)
+ 			client->filesystem = tmpf;
+ 		}
+ 	}
++	}
+ 
+ 	idevicerestore_progress(client, RESTORE_STEP_PREPARE, 0.2);
+-
+ 	/* retrieve shsh blobs if required */
+ 	if (tss_enabled) {
+ 		int stashbag_commit_required = 0;
+@@ -2875,6 +2877,16 @@ int build_manifest_check_compatibility(plist_t build_manifest, const char* produ
+ 	int res = -1;
+ 	plist_t node = plist_dict_get_item(build_manifest, "SupportedProductTypes");
+ 	if (!node || (plist_get_node_type(node) != PLIST_ARRAY)) {
++		/* T1 iBridge (MacBookPro13,x/14,x) EmbeddedOS bundles ship the newer
++		 * numeric "SupportedProductTypeIDs" instead of the string
++		 * "SupportedProductTypes" list. The device has already been identified
++		 * via libirecovery (x619ap/x619dev, CPID/BDID), so accept it when the
++		 * T1 EmbeddedOS mode is explicitly requested. */
++		if (getenv("IDEVICERESTORE_T1_EMBEDDEDOS") &&
++		    plist_dict_get_item(build_manifest, "SupportedProductTypeIDs")) {
++			logger(LL_INFO, "%s: T1 EmbeddedOS bundle accepted via SupportedProductTypeIDs\n", __func__);
++			return 0;
++		}
+ 		logger(LL_DEBUG, "%s: ERROR: SupportedProductTypes key missing\n", __func__);
+ 		logger(LL_DEBUG, "%s: WARNING: If attempting to install iPhoneOS 2.x, be advised that Restore.plist does not contain the\n", __func__);
+ 		logger(LL_DEBUG, "%s: WARNING: key 'SupportedProductTypes'. Recommendation is to manually add it to the Restore.plist.\n", __func__);
+diff --git a/src/recovery.c b/src/recovery.c
+index b843f1e..90fad65 100644
+--- a/src/recovery.c
++++ b/src/recovery.c
+@@ -124,7 +124,12 @@ int recovery_set_autoboot(struct idevicerestore_client_t* client, int enable)
+ 
+ int recovery_enter_restore(struct idevicerestore_client_t* client, plist_t build_identity)
+ {
+-    if (client->macos_variant) {
++    const char* t1_boot_args = getenv("IDEVICERESTORE_RESTORE_BOOT_ARGS");
++    if (t1_boot_args && *t1_boot_args) {
++        /* T1 EmbeddedOS: use the caller's boot args (e.g. omit
++         * nand-enable-reformat and set IOUSBDeviceController-configuration). */
++        client->restore_boot_args = strdup(t1_boot_args);
++    } else if (client->macos_variant) {
+         client->restore_boot_args = strdup("rd=md0 nand-enable-reformat=1 -progress -restore");
+     } else if (client->build_major >= 8) {
+         client->restore_boot_args = strdup("rd=md0 nand-enable-reformat=1 -progress");
+diff --git a/src/restore.c b/src/restore.c
+index 877b4a8..6adb533 100644
+--- a/src/restore.c
++++ b/src/restore.c
+@@ -1202,6 +1202,34 @@ int restore_send_root_ticket(struct idevicerestore_client_t* client, plist_t mes
+ 		return -1;
+ 	}
+ 
++	if (getenv("IDEVICERESTORE_T1_EMBEDDEDOS")) {
++		/* T1 EmbeddedOS has no system partition, so the FDR data must be carried
++		 * host<->device. Replay the saved FDR dictionary (if any) here. The saved
++		 * file is the device's FDRMemoryCommit message, whose payload lives at
++		 * Arguments.FDRMemoryStoreData. */
++		plist_t fdr = NULL;
++		const char* fdr_in = getenv("IDEVICERESTORE_T1_FDR_INPUT");
++		if (fdr_in && *fdr_in) {
++			plist_t root = NULL;
++			if (plist_read_from_file(fdr_in, &root, NULL) == 0) {
++				plist_t inner = plist_access_path(root, 2, "Arguments", "FDRMemoryStoreData");
++				if (!inner) {
++					inner = plist_dict_get_item(root, "FDRMemoryStoreData");
++				}
++				if (inner) {
++					fdr = plist_copy(inner);
++				}
++				plist_free(root);
++			}
++		}
++		if (!fdr) {
++			fdr = plist_new_dict();
++		}
++		plist_dict_set_item(dict, "FDRMemoryStoreData", fdr);
++		logger(LL_INFO, "Added FDRMemoryStoreData to RootTicket (input=%s)\n",
++			(fdr_in && *fdr_in) ? fdr_in : "(empty)");
++	}
++
+ 	logger(LL_INFO, "Sending RootTicket now...\n");
+ 	restore_error = _restore_service_send(service, dict, 0);
+ 	plist_free(dict);
+@@ -2430,6 +2458,19 @@ int restore_send_fdr_trust_data(struct idevicerestore_client_t* client, plist_t
+ 	 * and this is what iTunes seems to be doing too */
+ 	dict = plist_new_dict();
+ 
++	if (getenv("IDEVICERESTORE_T1_EMBEDDEDOS")) {
++		/* T1 EmbeddedOS: the device has no system partition, so provide the
++		 * FDR options that make it commit its memoryStore to the host. */
++		const char* p = getenv("IDEVICERESTORE_T1_FDR_STORE_PATH");
++		if (!p || !*p) {
++			p = "/tmp/fdr_memory";
++		}
++		plist_dict_set_item(dict, "FDRMemoryStorePath", plist_new_string(p));
++		plist_dict_set_item(dict, "FDRSkipDataPreservation", plist_new_bool(0));
++		plist_dict_set_item(dict, "FDREnableSso", plist_new_bool(0));
++		logger(LL_INFO, "T1 FDR options: FDRMemoryStorePath=%s\n", p);
++	}
++
+ 	restore_service_client_t service = _restore_get_service_client_for_data_request(client, message);
+ 	if (!service) {
+ 		logger(LL_ERROR, "%s: Unable to connect to service client\n", __func__);
+@@ -2450,6 +2491,43 @@ int restore_send_fdr_trust_data(struct idevicerestore_client_t* client, plist_t
+ 	return 0;
+ }
+ 
++int restore_send_fdr_memory_commit(struct idevicerestore_client_t* client, plist_t message)
++{
++	restored_error_t restore_error;
++	plist_t dict;
++
++	logger(LL_INFO, "About to handle FDR Memory Commit...\n");
++
++	/* The T1 EmbeddedOS has no system partition to persist FDR data, so the
++	 * device hands it to the host here. Save it (binary plist) for replay in the
++	 * next pass (IDEVICERESTORE_T1_FDR_OUTPUT). */
++	const char* outpath = getenv("IDEVICERESTORE_T1_FDR_OUTPUT");
++	if (outpath && *outpath) {
++		if (plist_write_to_file(message, outpath, PLIST_FORMAT_BINARY, PLIST_OPT_NONE) < 0) {
++			logger(LL_ERROR, "Unable to write FDR memory to %s\n", outpath);
++		} else {
++			logger(LL_INFO, "Saved FDR memory to %s\n", outpath);
++		}
++	}
++
++	/* Acknowledge so the device continues. */
++	dict = plist_new_dict();
++	restore_service_client_t service = _restore_get_service_client_for_data_request(client, message);
++	if (!service) {
++		logger(LL_ERROR, "%s: Unable to connect to service client\n", __func__);
++		return -1;
++	}
++	restore_error = _restore_service_send(service, dict, 0);
++	plist_free(dict);
++	_restore_service_free(service);
++	if (restore_error != RESTORE_E_SUCCESS) {
++		logger(LL_ERROR, "Unable to send FDR memory commit ack (%d)\n", restore_error);
++		return -1;
++	}
++	logger(LL_INFO, "Done handling FDR Memory Commit\n");
++	return 0;
++}
++
+ static int restore_send_image_data(struct idevicerestore_client_t *client, plist_t message, const char *image_list_k, const char *image_type_k, const char *image_data_k)
+ {
+ 	restored_error_t restore_error;
+@@ -4801,7 +4879,7 @@ int restore_handle_data_request_msg(struct idevicerestore_client_t* client, plis
+ 	node = plist_dict_get_item(message, "DataType");
+ 	if (node && PLIST_STRING == plist_get_node_type(node)) {
+ 		const char *type = plist_get_string_ptr(node, NULL);
+-logger(LL_DEBUG, "%s: type = %s\n", __func__, type);
++logger(LL_INFO, "%s: type = %s\n", __func__, type);
+ 		// this request is sent when restored is ready to receive the filesystem
+ 		if (!strcmp(type, "SystemImageData")) {
+ 			if (restore_send_filesystem(client, message) < 0) {
+@@ -4923,6 +5001,13 @@ logger(LL_DEBUG, "%s: type = %s\n", __func__, type);
+ 			}
+ 		}
+ 
++		else if (!strcmp(type, "FDRMemoryCommit")) {
++			if(restore_send_fdr_memory_commit(client, message) < 0) {
++				logger(LL_ERROR, "Unable to handle FDR memory commit\n");
++				return -1;
++			}
++		}
++
+ 		else if (!strcmp(type, "FUDData")) {
+ 			if(restore_send_image_data(client, message, "FUDImageList", "IsFUDFirmware", "FUDImageData") < 0) {
+ 				logger(LL_ERROR, "Unable to send FUD data\n");
+@@ -5231,6 +5316,13 @@ plist_t restore_supported_data_types()
+ 	plist_dict_set_item(dict, "USBCFWData", plist_new_bool(0));
+ 	plist_dict_set_item(dict, "USBCOverride", plist_new_bool(0));
+ 	plist_dict_set_item(dict, "UpdateVolumeOverlayRootDataCount", plist_new_bool(1));
++	if (getenv("IDEVICERESTORE_T1_EMBEDDEDOS")) {
++		/* The T1 EmbeddedOS has no system partition to persist FDR data, so let
++		 * the device hand its FDR memory to the host instead (FDR output/input). */
++		plist_dict_set_item(dict, "FDRMemoryCommit", plist_new_bool(1));
++		plist_dict_set_item(dict, "FDRTrustData", plist_new_bool(1));
++		plist_dict_set_item(dict, "FUDData", plist_new_bool(1));
++	}
+ 	return dict;
+ }
+ 
+@@ -5294,6 +5386,79 @@ static int restore_wait_for_reconnect(struct idevicerestore_client_t* client)
+ }
+ #endif
+ 
++/* T1 EmbeddedOS: capture the personalized boot image (a bare concatenation of
++ * OSRamdisk+KernelCache+DeviceTree+SEP) and the matching AP ticket from the
++ * current preflight TSS response, for the phase-14 memboot / EFI staging. */
++static void t1_capture_preflight(struct idevicerestore_client_t* client)
++{
++	const char* mbsave = getenv("IDEVICERESTORE_T1_PREFLIGHT_MEMBOOT_SAVE");
++	const char* tksave = getenv("IDEVICERESTORE_T1_PREFLIGHT_TICKET_SAVE");
++	if ((!mbsave || !*mbsave) && (!tksave || !*tksave)) {
++		return;
++	}
++	if (!client->tss) {
++		logger(LL_ERROR, "T1 preflight: no TSS response\n");
++		return;
++	}
++
++	if (mbsave && *mbsave) {
++		const char* comps[] = { "OSRamdisk", "KernelCache", "DeviceTree", "SEP" };
++		unsigned char* buf = NULL;
++		size_t buflen = 0;
++		int i;
++		for (i = 0; i < 4; i++) {
++			char* path = NULL;
++			if (build_identity_get_component_path(client->restore->build_identity, comps[i], &path) < 0 || !path) {
++				logger(LL_ERROR, "T1 preflight: no path for %s\n", comps[i]);
++				continue;
++			}
++			void* cdata = NULL; size_t csize = 0;
++			if (extract_component(client->ipsw, path, &cdata, &csize) < 0) {
++				logger(LL_ERROR, "T1 preflight: extract %s failed\n", comps[i]);
++				free(path);
++				continue;
++			}
++			free(path);
++			void* pdata = NULL; size_t psize = 0;
++			if (personalize_component(client, comps[i], cdata, csize, client->tss, &pdata, &psize) < 0) {
++				logger(LL_ERROR, "T1 preflight: personalize %s failed\n", comps[i]);
++				free(cdata);
++				continue;
++			}
++			free(cdata);
++			unsigned char* nb = realloc(buf, buflen + psize);
++			if (!nb) { free(pdata); free(buf); return; }
++			buf = nb;
++			memcpy(buf + buflen, pdata, psize);
++			buflen += psize;
++			free(pdata);
++			logger(LL_INFO, "T1 preflight: %s -> %zu bytes\n", comps[i], psize);
++		}
++		if (buf) {
++			if (write_file(mbsave, buf, buflen) == 0) {
++				logger(LL_INFO, "T1 preflight: wrote combined memboot (%zu bytes) to %s\n", buflen, mbsave);
++			}
++			free(buf);
++		}
++	}
++
++	if (tksave && *tksave) {
++		unsigned char* data = NULL;
++		unsigned int len = 0;
++		if (client->image4supported) {
++			tss_response_get_ap_img4_ticket(client->tss, &data, &len);
++		} else {
++			tss_response_get_ap_ticket(client->tss, &data, &len);
++		}
++		if (data && len) {
++			if (write_file(tksave, data, len) == 0) {
++				logger(LL_INFO, "T1 preflight: wrote AP ticket (%u bytes) to %s\n", len, tksave);
++			}
++		}
++		free(data);
++	}
++}
++
+ int restore_device(struct idevicerestore_client_t* client, plist_t build_identity)
+ {
+ 	int err = 0;
+@@ -5588,6 +5753,20 @@ int restore_device(struct idevicerestore_client_t* client, plist_t build_identit
+ 	}
+ 	plist_dict_set_item(opts, "CreateFilesystemPartitions", plist_new_bool(1));
+ 	plist_dict_set_item(opts, "SystemImage", plist_new_bool(1));
++	if (getenv("IDEVICERESTORE_T1_EMBEDDEDOS")) {
++		/* T1 EmbeddedOS: no host system image or partition restore (runbook's
++		 * phase-11 options). */
++		plist_dict_set_item(opts, "CreateFilesystemPartitions", plist_new_bool(0));
++		plist_dict_set_item(opts, "SystemImage", plist_new_bool(0));
++		plist_dict_set_item(opts, "ShouldRestoreSystemImage", plist_new_bool(0));
++		plist_dict_set_item(opts, "UpdateBaseband", plist_new_bool(0));
++		plist_dict_set_item(opts, "ApBootstrapOnly", plist_new_bool(0));
++		/* FDR options: the device reads these to decide whether to commit its
++		 * memoryStore to the host (it has no system partition). */
++		plist_dict_set_item(opts, "FDRMemoryStorePath", plist_new_string("/tmp/fdr_memory"));
++		plist_dict_set_item(opts, "FDRSkipDataPreservation", plist_new_bool(0));
++		plist_dict_set_item(opts, "FDREnableSso", plist_new_bool(0));
++	}
+ 	if (client->restore_boot_args) {
+ 		plist_dict_set_item(opts, "RestoreBootArgs", plist_new_string(client->restore_boot_args));
+ 	}
+@@ -5609,6 +5788,9 @@ int restore_device(struct idevicerestore_client_t* client, plist_t build_identit
+ 	plist_dict_set_item(opts, "SystemPartitionPadding", spp);
+ 
+ 	// start the restore process
++	if (getenv("IDEVICERESTORE_T1_EMBEDDEDOS")) {
++		t1_capture_preflight(client);
++	}
+ 	restore_error = restored_start_restore(restore, opts, client->restore->protocol_version);
+ 	if (restore_error != RESTORE_E_SUCCESS) {
+ 		logger(LL_ERROR, "Unable to start the restore process\n");

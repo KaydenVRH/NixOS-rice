@@ -10,6 +10,12 @@ let
   # services below never activate on the other laptop.
   isAsusLaptop = builtins.pathExists "/sys/devices/platform/asus-nb-wmi";
 
+  # Apple MacBook Pro support — only on Apple hardware. `applesmc` (the SMC
+  # driver) only binds on Macs, so this is false on the TUF A15. Used to pull
+  # in ./macbook.nix (Wi-Fi NVRAM + T1 Touch Bar) only where it is relevant.
+  isMacBook = builtins.pathExists "/sys/bus/platform/drivers/applesmc"
+    || builtins.pathExists "/sys/devices/platform/applesmc.768";
+
   # vesktop (Electron) picks XWayland, which Hyprland upscales under the 1.5
   # fractional scale, so it looks blurry/pixelated. Force native Wayland.
   vesktopWayland = pkgs.symlinkJoin {
@@ -51,7 +57,10 @@ in
     [ # Include the results of the hardware scan.
       ./hardware-configuration.nix
       ./hyprland-rice.nix
-    ];
+    ]
+    # Apple MacBook Pro (2016/2017, T1) support: Wi-Fi NVRAM and the Touch Bar
+    # driver. Imported only on Apple hardware, so it is inert on the TUF A15.
+    ++ lib.optional isMacBook ./macbook.nix;
 
   # Use the systemd-boot EFI boot loader.
   boot.loader.systemd-boot.enable = true;
@@ -279,6 +288,7 @@ in
      gh
      fastfetch
      btop
+     cmatrix
    ];
 
   # Some programs need SUID wrappers, can be configured further or are

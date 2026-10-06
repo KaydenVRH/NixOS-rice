@@ -20,6 +20,14 @@ let
   # flag is inert on other laptops.
   isAsusLaptop = builtins.pathExists "/sys/devices/platform/asus-nb-wmi";
 
+  # Apple gate: true only on Macs (the SMC driver exists there). On the Touch
+  # Bar MacBooks there is no physical Escape key, so remap Caps Lock to Escape
+  # as a fallback for when the Touch Bar driver is not up yet (boot picker,
+  # LUKS prompt, TTY, or if the iBridge driver fails).
+  isMacBook = builtins.pathExists "/sys/bus/platform/drivers/applesmc"
+    || builtins.pathExists "/sys/devices/platform/applesmc.768";
+  macbookInputLua = lib.optionalString isMacBook "\n        kb_options     = \"caps:escape\",";
+
   # Per-device pointer tweak for this laptop's ELAN touchpad (too fast by
   # default). Only emitted on ASUS hardware.
   touchpadLua = lib.optionalString isAsusLaptop ''
@@ -346,7 +354,7 @@ let
       },
 
       input = {
-        kb_layout      = "us",
+        kb_layout      = "us",${macbookInputLua}
         repeat_rate    = 40,     -- keys/second (default 25)
         repeat_delay   = 400,    -- ms before repeat kicks in (default 600)
         follow_mouse   = 1,
