@@ -518,6 +518,14 @@ ${touchpadLua}
       match = { class = "pavucontrol" },
       float = true,
     })
+
+    -- NVIDIA GeForce NOW (Flatpak, forced onto XWayland): open fullscreen.
+    -- Its WM_CLASS is "GeForceNOW" (verified via xprop).
+    hl.window_rule({
+      name  = "geforcenow-fullscreen",
+      match = { class = "^(GeForceNOW)$" },
+      fullscreen = true,
+    })
   '';
 
   # ===========================================================================

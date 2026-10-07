@@ -57,6 +57,8 @@ in
     [ # Include the results of the hardware scan.
       ./hardware-configuration.nix
       ./hyprland-rice.nix
+      # NVIDIA GeForce NOW, installed from NVIDIA's official Flatpak.
+      ./geforcenow.nix
     ]
     # Apple MacBook Pro (2016/2017, T1) support: Wi-Fi NVRAM and the Touch Bar
     # driver. Imported only on Apple hardware, so it is inert on the TUF A15.
