@@ -215,35 +215,78 @@ in
   # ===========================================================================
   #  Power / battery
   # ---------------------------------------------------------------------------
-  #  TLP does the CPU/Wi-Fi/USB/PCIe power work, the ASUS platform profile goes
-  #  to Quiet on battery, and the RTX 2050 is runtime-suspended (D3) until an
-  #  app asks for it with `nvidia-offload`.
+  #  Two honest profiles rather than one compromise. TLP does the CPU, Wi-Fi,
+  #  USB, PCIe and disk power work and flips between them on every AC change:
+  #
+  #    plugged in -> full performance: governor/EPP "performance", boost on,
+  #                  the ASUS "performance" platform profile (higher CPU+GPU
+  #                  power limits and an aggressive fan curve), no ASPM or
+  #                  device runtime-PM stalls.
+  #    on battery -> quiet: powersave/power, boost off, ASUS "quiet" profile,
+  #                  deep PCIe ASPM and device runtime PM.
+  #
+  #  The RTX 2050 stays runtime-suspended (D3) in both cases and wakes only
+  #  when an app asks for it with `nvidia-offload`.
   # ===========================================================================
   services.tlp = {
     enable = true;
     settings = {
-      CPU_SCALING_GOVERNOR_ON_AC = "schedutil";
-      CPU_SCALING_GOVERNOR_ON_BAT = "powersave";
-      CPU_ENERGY_PERF_POLICY_ON_AC = "balance_performance";
-      CPU_ENERGY_PERF_POLICY_ON_BAT = "power";
+      # ---- Plugged in: everything as fast as the silicon allows ------------
+      CPU_SCALING_GOVERNOR_ON_AC = "performance";
+      CPU_ENERGY_PERF_POLICY_ON_AC = "performance";
       CPU_BOOST_ON_AC = 1;
+
+      # This is what actually stops a plugged-in ASUS from throttling.
+      PLATFORM_PROFILE_ON_AC = "performance";
+
+      # Keep the buses awake so nothing has to spin up on demand.
+      WIFI_PWR_ON_AC = "off";
+      RUNTIME_PM_ON_AC = "on";
+      AHCI_RUNTIME_PM_ON_AC = "on";
+      PCIE_ASPM_ON_AC = "performance";
+      SATA_LINKPWR_ON_AC = "max_performance";
+      DISK_APM_LEVEL_ON_AC = "254 254";
+      SOUND_POWER_SAVE_ON_AC = 0;
+
+      # ---- On battery: save as much as possible -----------------------------
+      CPU_SCALING_GOVERNOR_ON_BAT = "powersave";
+      CPU_ENERGY_PERF_POLICY_ON_BAT = "power";
       CPU_BOOST_ON_BAT = 0;
 
-      PLATFORM_PROFILE_ON_AC = "balanced";
       PLATFORM_PROFILE_ON_BAT = "quiet";
 
-      WIFI_PWR_ON_AC = "off";
       WIFI_PWR_ON_BAT = "on";
-      RUNTIME_PM_ON_AC = "on";
       RUNTIME_PM_ON_BAT = "auto";
-      USB_AUTOSUSPEND = 1;
-
-      SOUND_POWER_SAVE_ON_AC = 0;
-      SOUND_POWER_SAVE_ON_BAT = 1;
-      PCIE_ASPM_ON_AC = "default";
       PCIE_ASPM_ON_BAT = "powersupersave";
+      SOUND_POWER_SAVE_ON_BAT = 1;
+
+      USB_AUTOSUSPEND = 1;
     };
   };
+
+  # On AC the Radeon 680M is pinned to its highest DPM level for smooth
+  # rendering; on battery the driver decides again. The udev rule re-runs this
+  # whenever the charger is plugged or unplugged.
+  systemd.services.amdgpu-perf = {
+    description = "Match the AMD GPU performance level to the power source";
+    wantedBy = [ "multi-user.target" ];
+    serviceConfig = { Type = "oneshot"; };
+    script = ''
+      level=auto
+      for p in /sys/class/power_supply/AC*/online /sys/class/power_supply/ADP*/online; do
+        if [ -e "$p" ] && [ "$(cat "$p")" = 1 ]; then
+          level=high
+        fi
+      done
+      for f in /sys/class/drm/card*/device/power_dpm_force_performance_level; do
+        [ -e "$f" ] || continue
+        echo "$level" > "$f" 2>/dev/null || true
+      done
+    '';
+  };
+  services.udev.extraRules = ''
+    SUBSYSTEM=="power_supply", ATTR{type}=="Mains", TAG+="systemd", ENV{SYSTEMD_WANTS}+="amdgpu-perf.service"
+  '';
 
   hardware.nvidia = {
     modesetting.enable = true;
