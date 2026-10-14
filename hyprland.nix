@@ -454,25 +454,31 @@ in
     slurp
   ];
 
+  # The bar's icons are Nerd Font glyphs; without the font they render as boxes.
+  fonts.packages = with pkgs; [ nerd-fonts.jetbrains-mono ];
+
   # Session daemons as systemd user services: at login the Wayland socket is
   # not ready yet, so Hyprland `exec-once` races it. systemd retries until the
-  # session has imported its environment.
+  # session has imported its environment — with the start limit disabled, since
+  # the first handful of attempts all fail before WAYLAND_DISPLAY exists.
   systemd.user.services.waybar = {
     description = "waybar";
     wantedBy = [ "default.target" ];
+    startLimitIntervalSec = 0;
     serviceConfig = {
       ExecStart = "${pkgs.waybar}/bin/waybar -c /etc/xdg/waybar/config.jsonc -s /etc/xdg/waybar/style.css";
       Restart = "always";
-      RestartSec = 2;
+      RestartSec = 3;
     };
   };
   systemd.user.services.swaybg = {
     description = "swaybg wallpaper";
     wantedBy = [ "default.target" ];
+    startLimitIntervalSec = 0;
     serviceConfig = {
       ExecStart = "${pkgs.swaybg}/bin/swaybg -i ${wallpaper} -m fill";
       Restart = "always";
-      RestartSec = 1;
+      RestartSec = 3;
     };
   };
 }
