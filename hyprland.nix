@@ -308,13 +308,11 @@ let
     confirm_os_window_close 0
   '';
 
-  # A quiet wallpaper: a dark diagonal gradient with a cool cast.
-  wallpaper = pkgs.runCommand "wallpaper.png" {
-    nativeBuildInputs = [ pkgs.imagemagick ];
-  } ''
-    magick -size 2560x1600 -define gradient:angle=115 \
-      gradient:'#18222f-#0a0a0c' "$out"
-  '';
+  # The NixOS "gear" artwork: near-black with a subtle hex texture and a
+  # glowing snowflake. It matches the slate palette and is a real NixOS
+  # wallpaper rather than a generated gradient.
+  wallpaper =
+    "${pkgs.nixos-artwork.wallpapers.gear}/share/wallpapers/gear/contents/images/nix-wallpaper-gear.png";
 
   # =========================================================================
   #  waybar — a thin, quiet bar
