@@ -26,6 +26,17 @@ let
     '';
   };
 
+  # qutebrowser is QtWebEngine; force the native Wayland backend so it is not
+  # blurry under the eDP panel's fractional (1.5x) scaling.
+  qutebrowserWayland = pkgs.symlinkJoin {
+    name = "qutebrowser";
+    paths = [ pkgs.qutebrowser ];
+    nativeBuildInputs = [ pkgs.makeWrapper ];
+    postBuild = ''
+      wrapProgram $out/bin/qutebrowser --set QT_QPA_PLATFORM wayland
+    '';
+  };
+
   # opencode v2 — nixpkgs ships 1.x only. The v2 CLI is a Bun single-file
   # binary that re-execs itself, and patchelf corrupts Bun's payload, so run it
   # unpatched via nix-ld. Bump version + hash together:
@@ -157,6 +168,16 @@ in
     XCURSOR_SIZE = "24";
   };
 
+  # qutebrowser (themed in hyprland.nix) is the default for links; LibreWolf is
+  # installed alongside and shows up in rofi.
+  xdg.mime.defaultApplications = {
+    "text/html" = "org.qutebrowser.qutebrowser.desktop";
+    "x-scheme-handler/http" = "org.qutebrowser.qutebrowser.desktop";
+    "x-scheme-handler/https" = "org.qutebrowser.qutebrowser.desktop";
+    "x-scheme-handler/about" = "org.qutebrowser.qutebrowser.desktop";
+    "x-scheme-handler/unknown" = "org.qutebrowser.qutebrowser.desktop";
+  };
+
   # Ly, matching the Hyprland palette (#0d0d0f / #8ab4f8).
   services.displayManager.ly = {
     enable = true;
@@ -209,6 +230,9 @@ in
     "d /home/k/.config/hypr 0755 k users -"
     "L+ /home/k/.config/hypr/hyprland.lua - - - - /etc/xdg/hypr/hyprland.lua"
     "L+ /home/k/.config/kitty/kitty.conf - - - - /etc/xdg/kitty/kitty.conf"
+    # qutebrowser only reads its config from ~/.config, so link it there.
+    "d /home/k/.config/qutebrowser 0755 k users -"
+    "L+ /home/k/.config/qutebrowser/config.py - - - - /etc/xdg/qutebrowser/config.py"
   ];
 
   # The NVIDIA WMI EC backlight comes up very dim on some boots (the EC default
@@ -380,6 +404,10 @@ in
     adw-gtk3
     papirus-icon-theme
     adwaita-icon-theme
+
+    # browsers
+    qutebrowserWayland
+    librewolf
 
     # chat / media
     vesktopWayland
