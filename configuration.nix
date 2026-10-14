@@ -167,7 +167,33 @@ in
   # The shipped unit has no [Install]; wire it up. It also sandboxes with
   # ReadWritePaths=/etc/asusd/, which must exist.
   systemd.services.asusd.wantedBy = lib.mkIf isAsus [ "multi-user.target" ];
-  systemd.tmpfiles.rules = lib.mkIf isAsus [ "d /etc/asusd 0755 root root -" ];
+  systemd.tmpfiles.rules = lib.mkIf isAsus [
+    "d /etc/asusd 0755 root root -"
+    # Hyprland 0.55 generates a default ~/.config/hypr/hyprland.lua when it
+    # finds none, and that user file then shadows /etc/xdg/hypr/hyprland.lua.
+    # Point both it and the kitty config at the Nix-managed ones.
+    "d /home/k/.config/hypr 0755 k users -"
+    "L+ /home/k/.config/hypr/hyprland.lua - - - - /etc/xdg/hypr/hyprland.lua"
+    "L+ /home/k/.config/kitty/kitty.conf - - - - /etc/xdg/kitty/kitty.conf"
+  ];
+
+  # The NVIDIA WMI EC backlight comes up very dim on some boots (the EC default
+  # is near zero); nudge it to a usable level when that happens.
+  systemd.services.backlight-floor = {
+    description = "Raise the backlight if it comes up too dim";
+    wantedBy = [ "multi-user.target" ];
+    serviceConfig = { Type = "oneshot"; };
+    script = ''
+      for b in /sys/class/backlight/*/brightness; do
+        [ -e "$b" ] || continue
+        max=$(cat "$(dirname "$b")/max_brightness" 2>/dev/null) || continue
+        cur=$(cat "$b" 2>/dev/null) || continue
+        if [ "$cur" -lt $((max / 5)) ]; then
+          echo $((max / 2)) > "$b" 2>/dev/null || true
+        fi
+      done
+    '';
+  };
 
   # OpenRGB: udev rules + the i2c modules for the keyboard RGB.
   services.udev.packages = [ pkgs.openrgb ];
