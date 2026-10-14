@@ -69,7 +69,20 @@ in
 
   # amd_pstate=active lets the EPP interface drive frequency; nmi_watchdog is
   # pure overhead on a laptop.
-  boot.kernelParams = [ "amd_pstate=active" "nmi_watchdog=0" ];
+  #
+  # Backlight: on this hybrid AMD+NVIDIA TUF the AMDGPU registers its backlight
+  # via eDP AUX, which this panel ignores, and the kernel then hands control to
+  # the firmware nvidia_wmi_ec_backlight, which does not drive the panel on a
+  # fresh boot either (it only works after a suspend/resume). Force AMDGPU PWM
+  # instead; the EC device is blacklisted below so it cannot win the precedence
+  # race. Without this the panel comes up near-black before the login screen.
+  boot.kernelParams = [
+    "amd_pstate=active"
+    "nmi_watchdog=0"
+    "acpi_backlight=native"
+    "amdgpu.backlight=0"
+  ];
+  boot.blacklistedKernelModules = [ "nvidia_wmi_ec_backlight" ];
 
   nix.gc = {
     automatic = true;
