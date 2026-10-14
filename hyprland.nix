@@ -167,58 +167,50 @@ let
   # =========================================================================
   #  rofi — the launcher / menu
   # =========================================================================
+  # rofi 2.0: the config file is itself a rasi theme, and @theme does not
+  # resolve, so the configuration block and the theme live in one file. The
+  # element colours come from the named variables (normal-background, ...),
+  # not a plain `element { }`, which is why they must be set here.
   rofiConfig = ''
     configuration {
-      modi             = "drun,run,window";
-      show-icons       = true;
-      icon-theme       = "Papirus-Dark";
-      font             = "${font} 11";
-      terminal         = "${terminal}";
-      drun-display-format = "{name}";
-      disable-history  = false;
-      sorting-method   = "fzf";
+      modi:            "drun,run,window";
+      show-icons:      true;
+      icon-theme:      "Papirus-Dark";
+      font:            "${font} 11";
+      terminal:        "${terminal}";
+      disable-history: false;
     }
-    @theme "/etc/xdg/rofi/theme.rasi"
-  '';
 
-  rofiTheme = ''
     * {
-      bg:      #${bg2};
-      bg-alt:  #${bg3};
-      fg:      #${fg};
-      dim:     #${dim};
-      accent:  #${accent};
-      red:     #${red};
-      background-color: transparent;
-      text-color: @fg;
-      border-color: @accent;
+      background:                  #${bg};
+      background-color:            transparent;
+      foreground:                  #${fg};
+      normal-background:           #${bg};
+      normal-foreground:           #${fg};
+      alternate-normal-background: #${bg1};
+      alternate-normal-foreground: @foreground;
+      selected-normal-background:  #${bg3};
+      selected-normal-foreground:  #${accent};
+      active-background:           #${bg1};
+      active-foreground:           #${accent};
+      selected-active-background:  #${bg3};
+      selected-active-foreground:  #${accent};
+      urgent-background:           #${bg1};
+      urgent-foreground:           #${red};
+      selected-urgent-background:  #${bg3};
+      selected-urgent-foreground:  #${red};
+      border-color:                #${accent};
+      separatorcolor:              #${bg3};
+      spacing:                     6;
     }
-
-    window {
-      width:           32%;
-      padding:         10px;
-      border:          2px;
-      border-radius:   8px;
-      background-color: @bg;
-      border-color:    @accent;
-    }
-
-    mainbox { children: [ inputbar, listview ]; spacing: 8px; }
-
-    inputbar {
-      children:   [ prompt, entry ];
-      padding:    8px 10px;
-      background-color: @bg-alt;
-      border-radius: 6px;
-    }
-    prompt { text-color: @accent; padding: 0 8px 0 0; }
-    entry  { text-color: @fg; placeholder: "Search…"; placeholder-color: @dim; }
-
-    listview { lines: 8; spacing: 4px; scrollbar: false; }
-    element  { padding: 7px 10px; border-radius: 6px; }
-    element selected { background-color: @bg-alt; text-color: @accent; }
-    element-text { text-color: inherit; }
-    element-icon { size: 1.2em; }
+    window { width: 32%; padding: 10px; border: 2px; border-radius: 8px; background-color: #${bg}; }
+    mainbox { border: 0; padding: 0; }
+    inputbar { children: [ prompt, entry ]; padding: 8px 10px; background-color: #${bg1}; border-radius: 6px; }
+    prompt { text-color: #${accent}; padding: 0 8px 0 0; }
+    entry { text-color: #${fg}; }
+    listview { lines: 8; spacing: 4px; scrollbar: false; border: 0; padding: 2px 0 0; }
+    element { padding: 7px 10px; border-radius: 6px; }
+    element-text { background-color: inherit; text-color: inherit; }
   '';
 
   # =========================================================================
@@ -315,6 +307,56 @@ let
     window_padding_width 8
     confirm_os_window_close 0
   '';
+
+  # A quiet wallpaper: a subtle vertical gradient, no image to source.
+  wallpaper = pkgs.runCommand "wallpaper.png" {
+    nativeBuildInputs = [ pkgs.imagemagick ];
+  } ''
+    magick -size 2560x1600 gradient:'#1b1b20-#0a0a0c' "$out"
+  '';
+
+  # =========================================================================
+  #  waybar — a thin, quiet bar
+  # =========================================================================
+  waybarSettings = {
+    layer = "top";
+    position = "top";
+    height = 28;
+    spacing = 6;
+    "modules-left" = [ "hyprland/workspaces" ];
+    "modules-center" = [ "clock" ];
+    "modules-right" = [ "cpu" "memory" "temperature" "pulseaudio" "network" "battery" "tray" ];
+
+    "hyprland/workspaces" = { format = "{id}"; "on-click" = "activate"; };
+    clock = { format = "{:%H:%M}"; "tooltip-format" = "{:%A %d %B}"; };
+    cpu = { format = "cpu {usage}%"; interval = 3; };
+    memory = { format = "mem {percentage}%"; interval = 5; };
+    temperature = { format = "temp {temperatureC}°C"; interval = 5; };
+    pulseaudio = { format = "vol {volume}%"; "format-muted" = "muted"; "on-click" = "pavucontrol"; };
+    network = {
+      "format-wifi" = "wifi {essid}";
+      "format-ethernet" = "eth {ifname}";
+      "format-disconnected" = "offline";
+      "tooltip-format" = "{ipaddr}";
+    };
+    battery = { format = "bat {capacity}%"; states = { warning = 30; critical = 15; }; };
+    tray = { spacing = 8; };
+  };
+
+  waybarStyle = ''
+    * { font-family: "${font}"; font-size: 12px; border: none; border-radius: 0; min-height: 0; }
+    window#waybar { background: #${bg}; color: #${fg}; }
+    #workspaces button { padding: 0 8px; color: #${dim}; background: transparent; }
+    #workspaces button.active { color: #${accent}; }
+    #workspaces button:hover { background: #${bg1}; }
+    #clock, #cpu, #memory, #temperature, #pulseaudio, #network, #battery, #tray {
+      padding: 0 10px;
+      color: #${fg};
+    }
+    #clock { color: #${accent}; }
+    #battery.warning { color: #${yellow}; }
+    #battery.critical { color: #${red}; }
+  '';
 in
 {
   programs.hyprland = {
@@ -327,16 +369,18 @@ in
     "xdg/hypr/hyprlock.conf".text  = hyprlockConf;
     "xdg/hypr/hypridle.conf".text  = hypridleConf;
     "xdg/rofi/config.rasi".text    = rofiConfig;
-    "xdg/rofi/theme.rasi".text     = rofiTheme;
     "xdg/kitty/kitty.conf".text    = kittyConf;
+    "xdg/waybar/config.jsonc".text = builtins.toJSON waybarSettings;
+    "xdg/waybar/style.css".text    = waybarStyle;
   };
 
   environment.systemPackages = with pkgs; [
     kitty
     rofi
+    waybar
     hyprlock
     hypridle
-    hyprpaper
+    swaybg
     brightnessctl
     playerctl
     pavucontrol
@@ -345,4 +389,26 @@ in
     grim
     slurp
   ];
+
+  # Session daemons as systemd user services: at login the Wayland socket is
+  # not ready yet, so Hyprland `exec-once` races it. systemd retries until the
+  # session has imported its environment.
+  systemd.user.services.waybar = {
+    description = "waybar";
+    wantedBy = [ "default.target" ];
+    serviceConfig = {
+      ExecStart = "${pkgs.waybar}/bin/waybar -c /etc/xdg/waybar/config.jsonc -s /etc/xdg/waybar/style.css";
+      Restart = "always";
+      RestartSec = 2;
+    };
+  };
+  systemd.user.services.swaybg = {
+    description = "swaybg wallpaper";
+    wantedBy = [ "default.target" ];
+    serviceConfig = {
+      ExecStart = "${pkgs.swaybg}/bin/swaybg -i ${wallpaper} -m fill";
+      Restart = "always";
+      RestartSec = 1;
+    };
+  };
 }
