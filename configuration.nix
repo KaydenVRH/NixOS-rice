@@ -48,6 +48,27 @@ let
         --set OPENCODE_DISABLE_AUTOUPDATE true
     '';
   };
+
+  # One-click "run Minecraft on the RTX 2050" entry. Same environment as the
+  # system `nvidia-offload` script, inlined so this does not depend on it.
+  prismlauncher-nvidia = pkgs.writeShellScriptBin "prismlauncher-nvidia" ''
+    export __NV_PRIME_RENDER_OFFLOAD=1
+    export __NV_PRIME_RENDER_OFFLOAD_PROVIDER=NVIDIA-G0
+    export __GLX_VENDOR_LIBRARY_NAME=nvidia
+    export __VK_LAYER_NV_optimus=NVIDIA_only
+    exec ${pkgs.prismlauncher}/bin/prismlauncher "$@"
+  '';
+
+  prismlauncher-nvidia-desktop = pkgs.makeDesktopItem {
+    name = "prismlauncher-nvidia";
+    desktopName = "Prism Launcher (NVIDIA)";
+    comment = "Play Minecraft on the RTX 2050 (PRIME offload)";
+    exec = "prismlauncher-nvidia %U";
+    icon = "org.prismlauncher.PrismLauncher";
+    categories = [ "Game" ];
+    startupNotify = true;
+    extraConfig = { StartupWMClass = "PrismLauncher"; };
+  };
 in
 
 {
@@ -369,6 +390,8 @@ in
     # gaming
     steam
     prismlauncher
+    prismlauncher-nvidia
+    prismlauncher-nvidia-desktop
 
     # asus
     asusctl
