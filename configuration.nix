@@ -168,14 +168,14 @@ in
     XCURSOR_SIZE = "24";
   };
 
-  # qutebrowser (themed in hyprland.nix) is the default for links; LibreWolf is
-  # installed alongside and shows up in rofi.
+  # LibreWolf is the default for links everywhere; qutebrowser stays one
+  # keypress away on SUPER+B (and shows up in rofi).
   xdg.mime.defaultApplications = {
-    "text/html" = "org.qutebrowser.qutebrowser.desktop";
-    "x-scheme-handler/http" = "org.qutebrowser.qutebrowser.desktop";
-    "x-scheme-handler/https" = "org.qutebrowser.qutebrowser.desktop";
-    "x-scheme-handler/about" = "org.qutebrowser.qutebrowser.desktop";
-    "x-scheme-handler/unknown" = "org.qutebrowser.qutebrowser.desktop";
+    "text/html" = "librewolf.desktop";
+    "x-scheme-handler/http" = "librewolf.desktop";
+    "x-scheme-handler/https" = "librewolf.desktop";
+    "x-scheme-handler/about" = "librewolf.desktop";
+    "x-scheme-handler/unknown" = "librewolf.desktop";
   };
 
   # Ly, matching the Hyprland palette (#0d0d0f / #8ab4f8).
