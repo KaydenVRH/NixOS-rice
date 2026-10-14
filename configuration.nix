@@ -224,15 +224,20 @@ in
   systemd.services.asusd.wantedBy = lib.mkIf isAsus [ "multi-user.target" ];
   systemd.tmpfiles.rules = lib.mkIf isAsus [
     "d /etc/asusd 0755 root root -"
-    # Hyprland 0.55 generates a default ~/.config/hypr/hyprland.lua when it
-    # finds none, and that user file then shadows /etc/xdg/hypr/hyprland.lua.
-    # Point both it and the kitty config at the Nix-managed ones.
+    # These apps only read their config from ~/.config (Hyprland 0.55 even
+    # generates a shadowing default there), so link the Nix-managed files in.
+    # They start on the default theme; theme-switch re-points them at runtime.
     "d /home/k/.config/hypr 0755 k users -"
-    "L+ /home/k/.config/hypr/hyprland.lua - - - - /etc/xdg/hypr/hyprland.lua"
-    "L+ /home/k/.config/kitty/kitty.conf - - - - /etc/xdg/kitty/kitty.conf"
-    # qutebrowser only reads its config from ~/.config, so link it there.
+    "d /home/k/.config/kitty 0755 k users -"
+    "d /home/k/.config/rofi 0755 k users -"
+    "d /home/k/.config/waybar 0755 k users -"
     "d /home/k/.config/qutebrowser 0755 k users -"
-    "L+ /home/k/.config/qutebrowser/config.py - - - - /etc/xdg/qutebrowser/config.py"
+    "L+ /home/k/.config/hypr/hyprland.lua   - - - - /etc/xdg/themes/slate/hyprland.lua"
+    "L+ /home/k/.config/hypr/hyprlock.conf  - - - - /etc/xdg/themes/slate/hyprlock.conf"
+    "L+ /home/k/.config/kitty/kitty.conf    - - - - /etc/xdg/themes/slate/kitty.conf"
+    "L+ /home/k/.config/rofi/config.rasi    - - - - /etc/xdg/themes/slate/rofi.rasi"
+    "L+ /home/k/.config/waybar/style.css    - - - - /etc/xdg/themes/slate/waybar.css"
+    "L+ /home/k/.config/qutebrowser/config.py - - - - /etc/xdg/themes/slate/qutebrowser-config.py"
   ];
 
   # The NVIDIA WMI EC backlight comes up very dim on some boots (the EC default

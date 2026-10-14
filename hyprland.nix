@@ -26,9 +26,51 @@ let
 
   # -- Apps ------------------------------------------------------------------
   terminal = "kitty";
-  menu     = "rofi -show drun -config /etc/xdg/rofi/config.rasi";
+  menu     = "rofi -show drun -config $HOME/.config/rofi/config.rasi";
   browser  = "qutebrowser";
   font     = "JetBrainsMono Nerd Font";
+
+  # -- Themes ----------------------------------------------------------------
+  # A theme is a palette plus the NixOS wallpaper that matches it. Every file
+  # below is authored in the `slate` palette (the named colours at the top) and
+  # each other theme is produced by swapping those exact values out with
+  # `recolor`, so adding a theme means adding one entry here.
+  themes = {
+    slate = { bg = "0d0d0f"; bg1 = "141417"; bg2 = "1b1b20"; bg3 = "26262d";
+              fg = "d6d6dd"; dim = "7d7d8a"; accent = "8ab4f8";
+              green = "a3d977"; yellow = "e6c07b"; red = "e06c75";
+              wallpaper = "gear"; };
+    mocha = { bg = "1e1e2e"; bg1 = "181825"; bg2 = "313244"; bg3 = "45475a";
+              fg = "cdd6f4"; dim = "a6adc8"; accent = "cba6f7";
+              green = "a6e3a1"; yellow = "f9e2af"; red = "f38ba8";
+              wallpaper = "catppuccin-mocha"; };
+    macchiato = { bg = "24273a"; bg1 = "1e2030"; bg2 = "363a4f"; bg3 = "494d64";
+              fg = "cad3f5"; dim = "a5adcb"; accent = "c6a0f6";
+              green = "a6da95"; yellow = "eed49f"; red = "ed8796";
+              wallpaper = "catppuccin-macchiato"; };
+    dracula = { bg = "282a36"; bg1 = "21222c"; bg2 = "343746"; bg3 = "44475a";
+              fg = "f8f8f2"; dim = "6272a4"; accent = "bd93f9";
+              green = "50fa7b"; yellow = "f1fa8c"; red = "ff5555";
+              wallpaper = "dracula"; };
+    nord = { bg = "2e3440"; bg1 = "3b4252"; bg2 = "434c5e"; bg3 = "4c566a";
+              fg = "d8dee9"; dim = "81a1c1"; accent = "88c0d0";
+              green = "a3be8c"; yellow = "ebcb8b"; red = "bf616a";
+              wallpaper = "simple-dark-gray"; };
+    tokyonight = { bg = "1a1b26"; bg1 = "16161e"; bg2 = "292e42"; bg3 = "3b4261";
+              fg = "c0caf5"; dim = "565f89"; accent = "7aa2f7";
+              green = "9ece6a"; yellow = "e0af68"; red = "f7768e";
+              wallpaper = "mosaic-blue"; };
+  };
+
+  wallpaperOf = w:
+    "${pkgs.nixos-artwork.wallpapers.${w}}/share/wallpapers/${w}/contents/images/nix-wallpaper-${w}.png";
+
+  # replaceStrings scans the input once and never rescans its own output, so a
+  # replacement value can never be replaced again.
+  base = themes.slate;
+  recolor = pal: builtins.replaceStrings
+    [ base.bg base.bg1 base.bg2 base.bg3 base.fg base.dim base.accent base.green base.yellow base.red ]
+    [ pal.bg  pal.bg1  pal.bg2  pal.bg3  pal.fg  pal.dim  pal.accent  pal.green  pal.yellow  pal.red ];
 
   # =========================================================================
   #  Hyprland
@@ -98,7 +140,9 @@ let
     hl.bind(mainMod .. " + D",      hl.dsp.exec_cmd(menu))
     hl.bind(mainMod .. " + B",      hl.dsp.exec_cmd(browser))
     hl.bind(mainMod .. " + L",      hl.dsp.exec_cmd("hyprlock"))
-    hl.bind(mainMod .. " + W",      hl.dsp.exec_cmd("rofi -show window -config /etc/xdg/rofi/config.rasi"))
+    hl.bind(mainMod .. " + W",      hl.dsp.exec_cmd("rofi -show window -config $HOME/.config/rofi/config.rasi"))
+    hl.bind(mainMod .. " + SHIFT + M", hl.dsp.exec_cmd("music-menu"))
+    hl.bind(mainMod .. " + SHIFT + T", hl.dsp.exec_cmd("theme-switch"))
 
     ----------------------------------------------------------------
     ---- WINDOWS ---------------------------------------------------
@@ -411,19 +455,13 @@ let
     c.url.default_page = "about:blank"
   '';
 
-  # The NixOS "gear" artwork: near-black with a subtle hex texture and a
-  # glowing snowflake. It matches the slate palette and is a real NixOS
-  # wallpaper rather than a generated gradient.
-  wallpaper =
-    "${pkgs.nixos-artwork.wallpapers.gear}/share/wallpapers/gear/contents/images/nix-wallpaper-gear.png";
-
   # =========================================================================
   #  waybar — a thin, quiet bar
   # =========================================================================
   # Rofi-driven power menu for the bar's power button.
   powerMenu = pkgs.writeShellScriptBin "power-menu" ''
     chosen=$(printf 'Lock\nLogout\nSuspend\nReboot\nShutdown' \
-      | ${pkgs.rofi}/bin/rofi -dmenu -p power -config /etc/xdg/rofi/config.rasi)
+      | ${pkgs.rofi}/bin/rofi -dmenu -p power -config $HOME/.config/rofi/config.rasi)
     case "$chosen" in
       Lock)     exec ${pkgs.hyprlock}/bin/hyprlock ;;
       Logout)   exec ${pkgs.hyprland}/bin/hyprctl dispatch exit ;;
@@ -466,7 +504,7 @@ let
         "on-click": "pavucontrol",
         "scroll-step": 5
       },
-      "mpris": { "format": "\uf001 {title}", "max-length": 45 },
+      "mpris": { "format": "\uf001 {title}", "max-length": 45, "on-click": "music-menu" },
 
       "network": {
         "format-wifi": "\uf1eb {essid}",
@@ -521,6 +559,165 @@ let
     #battery.critical { color: #${red}; }
     #custom-power { color: #${accent}; padding: 0 10px; }
   '';
+
+  # -------------------------------------------------------------------------
+  #  Per-theme files
+  # -------------------------------------------------------------------------
+  # /etc/xdg/themes/<name>/ holds every recoloured file plus the wallpaper
+  # path; `theme-switch` points the user's config at the chosen directory.
+  themeDir = name: pal: pkgs.linkFarm "theme-${name}" [
+    { name = "hyprland.lua";         path = pkgs.writeText "${name}-hyprland.lua" (recolor pal hyprlandLua); }
+    { name = "hyprlock.conf";        path = pkgs.writeText "${name}-hyprlock.conf" (recolor pal hyprlockConf); }
+    { name = "kitty.conf";           path = pkgs.writeText "${name}-kitty.conf" (recolor pal kittyConf); }
+    { name = "rofi.rasi";            path = pkgs.writeText "${name}-rofi.rasi" (recolor pal rofiConfig); }
+    { name = "waybar.css";           path = pkgs.writeText "${name}-waybar.css" (recolor pal waybarStyle); }
+    { name = "qutebrowser-config.py"; path = pkgs.writeText "${name}-qutebrowser.py" (recolor pal qutebrowserConfig); }
+    { name = "wallpaper";            path = pkgs.writeText "${name}-wallpaper" (wallpaperOf pal.wallpaper); }
+  ];
+  themesDir = pkgs.linkFarm "themes"
+    (lib.mapAttrsToList (n: p: { name = n; path = themeDir n p; }) themes);
+
+  # Like writeShellScriptBin but without `-e`, so best-effort reloads in a
+  # half-started session do not abort the script.
+  writeSh = name: text: pkgs.writeTextFile {
+    inherit name text;
+    executable = true;
+    destination = "/bin/${name}";
+    checkPhase = "${pkgs.bash}/bin/bash -n $out/bin/${name}";
+  };
+
+  # ---- theme switcher -----------------------------------------------------
+  themeSwitch = writeSh "theme-switch" ''
+    #!/bin/sh
+    # theme-switch [--apply] — pick a desktop theme with rofi, or re-apply the
+    # saved one (used at login). Writes ~/.config/theme and points the user
+    # config at /etc/xdg/themes/<name>, then reloads the session.
+    THEMES=/etc/xdg/themes
+    STATE="$HOME/.config/theme"
+    ROFI="${pkgs.rofi}/bin/rofi -dmenu -i -no-custom -config $HOME/.config/rofi/config.rasi"
+
+    current=$(cat "$STATE" 2>/dev/null)
+    [ -n "$current" ] || current=slate
+
+    if [ "$1" = "--apply" ]; then
+      name=$current
+    else
+      name=$(ls "$THEMES" 2>/dev/null | $ROFI -p theme -mesg "current: $current")
+      [ -n "$name" ] || exit 0
+    fi
+    [ -d "$THEMES/$name" ] || exit 1
+
+    mkdir -p "$HOME/.config/hypr" "$HOME/.config/kitty" "$HOME/.config/rofi" \
+             "$HOME/.config/waybar" "$HOME/.config/qutebrowser"
+    ln -sfn "$THEMES/$name/hyprland.lua"          "$HOME/.config/hypr/hyprland.lua"
+    ln -sfn "$THEMES/$name/hyprlock.conf"         "$HOME/.config/hypr/hyprlock.conf"
+    ln -sfn "$THEMES/$name/kitty.conf"            "$HOME/.config/kitty/kitty.conf"
+    ln -sfn "$THEMES/$name/rofi.rasi"             "$HOME/.config/rofi/config.rasi"
+    ln -sfn "$THEMES/$name/waybar.css"            "$HOME/.config/waybar/style.css"
+    ln -sfn "$THEMES/$name/qutebrowser-config.py" "$HOME/.config/qutebrowser/config.py"
+    printf '%s\n' "$name" > "$STATE"
+
+    # Best effort — the session may not be up yet (login).
+    ${pkgs.hyprland}/bin/hyprctl reload >/dev/null 2>&1
+    ${pkgs.systemd}/bin/systemctl --user restart waybar swaybg >/dev/null 2>&1
+    ${pkgs.procps}/bin/pkill -USR1 -x kitty >/dev/null 2>&1
+    exit 0
+  '';
+
+  # ---- wallpaper for the current theme ------------------------------------
+  themedSwaybg = writeSh "themed-swaybg" ''
+    #!/bin/sh
+    name=$(cat "$HOME/.config/theme" 2>/dev/null)
+    [ -n "$name" ] || name=slate
+    wl="/etc/xdg/themes/$name/wallpaper"
+    [ -r "$wl" ] || wl=/etc/xdg/themes/slate/wallpaper
+    exec ${pkgs.swaybg}/bin/swaybg -i "$(cat "$wl")" -m fill
+  '';
+
+  # ---- music player -------------------------------------------------------
+  # Rofi front-end to mpv: a local library plus YouTube search / stream /
+  # download, driven over mpv's IPC socket. Bound to SUPER+SHIFT+M.
+  musicMenu = writeSh "music-menu" ''
+    #!/bin/sh
+    export PATH="${lib.makeBinPath (with pkgs; [ yt-dlp jq netcat-openbsd mpv procps findutils coreutils gnused curl ])}:$PATH"
+    SOCK="$XDG_RUNTIME_DIR/music-mpv.sock"
+    MUSIC_DIR="$HOME/Music"
+    ROFI="${pkgs.rofi}/bin/rofi -dmenu -i -config $HOME/.config/rofi/config.rasi"
+
+    ensure_mpv() {
+      if pgrep -f "input-ipc-server=$SOCK" >/dev/null 2>&1; then return 0; fi
+      mpv --no-video --idle=yes --force-window=no --input-ipc-server="$SOCK" >/dev/null 2>&1 &
+      i=0
+      while [ "$i" -lt 30 ] && [ ! -S "$SOCK" ]; do sleep 0.1; i=$((i + 1)); done
+    }
+    mpvcmd() { printf '%s\n' "$1" | timeout 1 nc -q 0 -U "$SOCK" >/dev/null 2>&1 || true; }
+    prop()   { printf '{"command":["get_property","%s"],"request_id":%s}\n' "$2" "$1"; }
+
+    nowline() {
+      [ -S "$SOCK" ] || { printf 'Nothing playing'; return 0; }
+      printf '%s\n' "$(prop 1 media-title)" "$(prop 2 pause)" \
+        | timeout 1 nc -q 0 -U "$SOCK" 2>/dev/null \
+        | jq -rs 'def v(i): (map(select(.request_id==i))[0].data // ""); (v(1)) + (if v(2)==true then "  (paused)" else "  (playing)" end)' 2>/dev/null \
+        || true
+    }
+    play_id()   { ensure_mpv; mpvcmd "$(jq -cn --arg u "https://www.youtube.com/watch?v=$1" '{command:["loadfile",$u,"replace"]}')"; }
+    play_file() { ensure_mpv; mpvcmd "$(jq -cn --arg p "$1" '{command:["loadfile",$p,"replace"]}')"; }
+
+    # pick <prompt>: read "display<TAB>payload" lines, echo the chosen payload
+    pick() {
+      tmp=$(mktemp)
+      cat > "$tmp"
+      idx=$(cut -f1 "$tmp" | $ROFI -p "$1" -format i -no-custom -mesg "$(nowline)")
+      if [ -z "$idx" ]; then rm -f "$tmp"; return 1; fi
+      sed -n "$((idx + 1))p" "$tmp" | cut -f2-
+      rm -f "$tmp"
+    }
+
+    case "$1" in
+      search)
+        q=$($ROFI -p search -mesg "search YouTube")
+        [ -n "$q" ] || exit 0
+        res=$(mktemp)
+        yt-dlp --flat-playlist --no-warnings -J "ytsearch15:$q" 2>/dev/null \
+          | jq -r '.entries[]? | [ .title + "  [" + ((.duration // 0)|tostring) + "s] — " + (.uploader // "?"), .id ] | @tsv' > "$res" 2>/dev/null
+        [ -s "$res" ] || { rm -f "$res"; exit 0; }
+        id=$(pick result < "$res") || exit 0
+        rm -f "$res"
+        [ -n "$id" ] || exit 0
+        case "$(printf 'Play\nDownload' | $ROFI -p action)" in
+          Play)     play_id "$id" ;;
+          Download) mkdir -p "$MUSIC_DIR"
+                    yt-dlp -x --audio-format mp3 --audio-quality 0 --embed-thumbnail --add-metadata \
+                      -o "$MUSIC_DIR/%(title)s.%(ext)s" "https://www.youtube.com/watch?v=$id" >/dev/null 2>&1 & ;;
+        esac
+        ;;
+      library)
+        [ -d "$MUSIC_DIR" ] || exit 0
+        res=$(mktemp)
+        find "$MUSIC_DIR" -type f \
+          \( -iname '*.mp3' -o -iname '*.m4a' -o -iname '*.opus' -o -iname '*.flac' \
+             -o -iname '*.ogg' -o -iname '*.wav' -o -iname '*.aac' -o -iname '*.webm' \) \
+          -printf '%f\t%p\n' 2>/dev/null | sort > "$res"
+        [ -s "$res" ] || { rm -f "$res"; exit 0; }
+        f=$(pick library < "$res") || exit 0
+        rm -f "$res"
+        [ -n "$f" ] && play_file "$f"
+        ;;
+      *)
+        choice=$(printf '%s\n' "Play / pause" "Stop" "Back 10s" "Forward 10s" \
+                   "Search YouTube…" "Library…" \
+                 | $ROFI -p music -mesg "$(nowline)")
+        case "$choice" in
+          "Play / pause")  mpvcmd '{"command":["cycle","pause"]}' ;;
+          "Stop")          mpvcmd '{"command":["stop"]}' ;;
+          "Back 10s")      mpvcmd '{"command":["seek",-10,"relative"]}' ;;
+          "Forward 10s")   mpvcmd '{"command":["seek",10,"relative"]}' ;;
+          "Search YouTube…") exec "$0" search ;;
+          "Library…")        exec "$0" library ;;
+        esac
+        ;;
+    esac
+  '';
 in
 {
   programs.hyprland = {
@@ -537,6 +734,8 @@ in
     "xdg/qutebrowser/config.py".text  = qutebrowserConfig;
     "xdg/waybar/config.jsonc".text = waybarConfig;
     "xdg/waybar/style.css".text    = waybarStyle;
+    # One directory per theme; theme-switch points the user config at one.
+    "xdg/themes".source            = themesDir;
   };
 
   environment.systemPackages = with pkgs; [
@@ -547,6 +746,8 @@ in
     hypridle
     swaybg
     powerMenu
+    themeSwitch
+    musicMenu
     brightnessctl
     playerctl
     pavucontrol
@@ -568,7 +769,7 @@ in
     wantedBy = [ "default.target" ];
     startLimitIntervalSec = 0;
     serviceConfig = {
-      ExecStart = "${pkgs.waybar}/bin/waybar -c /etc/xdg/waybar/config.jsonc -s /etc/xdg/waybar/style.css";
+      ExecStart = "${pkgs.waybar}/bin/waybar -c /etc/xdg/waybar/config.jsonc -s %h/.config/waybar/style.css";
       Restart = "always";
       RestartSec = 3;
     };
@@ -578,9 +779,20 @@ in
     wantedBy = [ "default.target" ];
     startLimitIntervalSec = 0;
     serviceConfig = {
-      ExecStart = "${pkgs.swaybg}/bin/swaybg -i ${wallpaper} -m fill";
+      ExecStart = "${themedSwaybg}/bin/themed-swaybg";
       Restart = "always";
       RestartSec = 3;
+    };
+  };
+
+  # Re-assert the saved theme at login: tmpfiles resets the user links to slate
+  # at boot, and the compositor may have read them before this ran.
+  systemd.user.services.theme-apply = {
+    description = "Apply the saved desktop theme";
+    wantedBy = [ "default.target" ];
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = "${themeSwitch}/bin/theme-switch --apply";
     };
   };
 }
