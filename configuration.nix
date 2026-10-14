@@ -87,6 +87,7 @@ in
     ./hardware-configuration.nix
     ./hyprland.nix
     ./geforcenow.nix
+    ./neovim.nix
   ];
 
   # ===========================================================================
