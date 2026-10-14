@@ -308,54 +308,117 @@ let
     confirm_os_window_close 0
   '';
 
-  # A quiet wallpaper: a subtle vertical gradient, no image to source.
+  # A quiet wallpaper: a dark diagonal gradient with a cool cast.
   wallpaper = pkgs.runCommand "wallpaper.png" {
     nativeBuildInputs = [ pkgs.imagemagick ];
   } ''
-    magick -size 2560x1600 gradient:'#1b1b20-#0a0a0c' "$out"
+    magick -size 2560x1600 -define gradient:angle=115 \
+      gradient:'#18222f-#0a0a0c' "$out"
   '';
 
   # =========================================================================
   #  waybar — a thin, quiet bar
   # =========================================================================
-  waybarSettings = {
-    layer = "top";
-    position = "top";
-    height = 28;
-    spacing = 6;
-    "modules-left" = [ "hyprland/workspaces" ];
-    "modules-center" = [ "clock" ];
-    "modules-right" = [ "cpu" "memory" "temperature" "pulseaudio" "network" "battery" "tray" ];
+  # Rofi-driven power menu for the bar's power button.
+  powerMenu = pkgs.writeShellScriptBin "power-menu" ''
+    chosen=$(printf 'Lock\nLogout\nSuspend\nReboot\nShutdown' \
+      | ${pkgs.rofi}/bin/rofi -dmenu -p power -config /etc/xdg/rofi/config.rasi)
+    case "$chosen" in
+      Lock)     exec ${pkgs.hyprlock}/bin/hyprlock ;;
+      Logout)   exec ${pkgs.hyprland}/bin/hyprctl dispatch exit ;;
+      Suspend)  exec ${pkgs.systemd}/bin/systemctl suspend ;;
+      Reboot)   exec ${pkgs.systemd}/bin/systemctl reboot ;;
+      Shutdown) exec ${pkgs.systemd}/bin/systemctl poweroff ;;
+    esac
+  '';
 
-    "hyprland/workspaces" = { format = "{id}"; "on-click" = "activate"; };
-    clock = { format = "{:%H:%M}"; "tooltip-format" = "{:%A %d %B}"; };
-    cpu = { format = "cpu {usage}%"; interval = 3; };
-    memory = { format = "mem {percentage}%"; interval = 5; };
-    temperature = { format = "temp {temperatureC}°C"; interval = 5; };
-    pulseaudio = { format = "vol {volume}%"; "format-muted" = "muted"; "on-click" = "pavucontrol"; };
-    network = {
-      "format-wifi" = "wifi {essid}";
-      "format-ethernet" = "eth {ifname}";
-      "format-disconnected" = "offline";
-      "tooltip-format" = "{ipaddr}";
-    };
-    battery = { format = "bat {capacity}%"; states = { warning = 30; critical = 15; }; };
-    tray = { spacing = 8; };
-  };
+  # JSON with \uXXXX icon escapes: the Nix '' string keeps the backslash and
+  # waybar's JSON parser decodes it to the Nerd Font glyph.
+  waybarConfig = ''
+    {
+      "layer": "top",
+      "position": "top",
+      "height": 30,
+      "spacing": 6,
+      "modules-left": ["hyprland/workspaces", "hyprland/submap", "hyprland/window"],
+      "modules-center": ["clock"],
+      "modules-right": ["idle_inhibitor", "cpu", "memory", "temperature", "disk", "backlight", "pulseaudio", "mpris", "network", "bluetooth", "battery", "tray", "custom/power"],
+
+      "hyprland/workspaces": { "format": "{id}", "on-click": "activate" },
+      "hyprland/submap": { "format": " {}", "tooltip": false },
+      "hyprland/window": { "format": "{title}", "max-length": 70 },
+
+      "clock": { "format": "\uf017 {:%H:%M}", "tooltip-format": "<big>{:%A %d %B %Y}</big>\n<tt><small>{calendar}</small></tt>" },
+
+      "idle_inhibitor": { "format": "{icon}", "format-icons": { "activated": "\uf06e", "deactivated": "\uf070" } },
+
+      "cpu":         { "format": "\uf2db {usage}%", "interval": 3, "tooltip": true },
+      "memory":      { "format": "\uf538 {percentage}%", "interval": 5, "tooltip": true },
+      "temperature": { "format": "\uf2c7 {temperatureC}°C", "interval": 5, "critical-threshold": 80 },
+      "disk":        { "format": "\uf0a0 {percentage_used}%", "path": "/", "interval": 30 },
+      "backlight":   { "format": "\uf185 {percent}%" },
+
+      "pulseaudio": {
+        "format": "{icon} {volume}%",
+        "format-muted": "\uf026 muted",
+        "format-icons": { "default": ["\uf026", "\uf027", "\uf028"] },
+        "on-click": "pavucontrol",
+        "scroll-step": 5
+      },
+      "mpris": { "format": "\uf001 {title}", "max-length": 45 },
+
+      "network": {
+        "format-wifi": "\uf1eb {essid}",
+        "format-ethernet": "\uf6ff {ifname}",
+        "format-disconnected": "\uf1eb offline",
+        "tooltip-format": "{ipaddr}/{cidr}"
+      },
+      "bluetooth": {
+        "format": "\uf293 {status}",
+        "format-disabled": "\uf293 off",
+        "format-connected": "\uf293 {device_alias}",
+        "tooltip-format": "{controller_alias}  {controller_address}\n{num_connections} connected",
+        "on-click": "blueman-manager"
+      },
+      "battery": {
+        "format": "{icon} {capacity}%",
+        "format-charging": "\uf1e6 {capacity}%",
+        "format-icons": ["\uf244", "\uf243", "\uf242", "\uf241", "\uf240"],
+        "states": { "warning": 30, "critical": 15 },
+        "tooltip-format": "{timeTo}\n{power:>1.2f}W"
+      },
+      "tray": { "spacing": 8, "icon-size": 16 },
+      "custom/power": { "format": "\uf011", "tooltip": "Power", "on-click": "power-menu" }
+    }
+  '';
 
   waybarStyle = ''
     * { font-family: "${font}"; font-size: 12px; border: none; border-radius: 0; min-height: 0; }
     window#waybar { background: #${bg}; color: #${fg}; }
-    #workspaces button { padding: 0 8px; color: #${dim}; background: transparent; }
+
+    #workspaces button { padding: 0 7px; color: #${dim}; background: transparent; }
     #workspaces button.active { color: #${accent}; }
     #workspaces button:hover { background: #${bg1}; }
-    #clock, #cpu, #memory, #temperature, #pulseaudio, #network, #battery, #tray {
-      padding: 0 10px;
-      color: #${fg};
-    }
-    #clock { color: #${accent}; }
+
+    #window { color: #${dim}; padding: 0 10px; }
+    #submap { color: #${yellow}; padding: 0 10px; }
+
+    #clock { color: #${accent}; padding: 0 12px; }
+    #idle_inhibitor { padding: 0 8px; color: #${dim}; }
+    #idle_inhibitor.activated { color: #${accent}; }
+
+    #cpu, #memory, #temperature, #disk, #backlight, #pulseaudio, #mpris,
+    #network, #bluetooth, #battery, #tray { padding: 0 9px; color: #${fg}; }
+
+    #temperature.critical { color: #${red}; }
+    #pulseaudio.muted { color: #${dim}; }
+    #network.disconnected { color: #${dim}; }
+    #bluetooth.disabled { color: #${dim}; }
+    #bluetooth.connected { color: #${accent}; }
+    #battery.charging { color: #${green}; }
     #battery.warning { color: #${yellow}; }
     #battery.critical { color: #${red}; }
+    #custom-power { color: #${accent}; padding: 0 10px; }
   '';
 in
 {
@@ -370,7 +433,7 @@ in
     "xdg/hypr/hypridle.conf".text  = hypridleConf;
     "xdg/rofi/config.rasi".text    = rofiConfig;
     "xdg/kitty/kitty.conf".text    = kittyConf;
-    "xdg/waybar/config.jsonc".text = builtins.toJSON waybarSettings;
+    "xdg/waybar/config.jsonc".text = waybarConfig;
     "xdg/waybar/style.css".text    = waybarStyle;
   };
 
@@ -381,6 +444,7 @@ in
     hyprlock
     hypridle
     swaybg
+    powerMenu
     brightnessctl
     playerctl
     pavucontrol
