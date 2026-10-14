@@ -160,6 +160,11 @@ let
     ----------------------------------------------------------------
     ---- WINDOW RULES ----------------------------------------------
     ----------------------------------------------------------------
+    -- Apps (kitty, games, ...) ask the compositor to maximize themselves, which
+    -- makes them cover the tiled windows. Ignore those requests so everything
+    -- stays tiled; SUPER+F still fullscreens a window on demand.
+    hl.window_rule({ name = "suppress-maximize-events", match = { class = ".*" }, suppress_event = "maximize" })
+
     hl.window_rule({ name = "float-pavucontrol", match = { class = "pavucontrol" }, float = true })
     hl.window_rule({ name = "float-nm",          match = { class = "nm-connection-editor" }, float = true })
   '';
