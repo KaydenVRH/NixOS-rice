@@ -354,6 +354,11 @@ let
     font_size        11.0
     cursor_shape     beam
 
+    # Slightly see-through — Hyprland blends the window against what's behind.
+    # ctrl+shift+a then m / l nudges the opacity at runtime.
+    background_opacity          0.9
+    dynamic_background_opacity  yes
+
     background       #${bg}
     foreground       #${fg}
     selection_background #${bg3}
