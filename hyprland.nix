@@ -60,6 +60,30 @@ let
               fg = "c0caf5"; dim = "565f89"; accent = "7aa2f7";
               green = "9ece6a"; yellow = "e0af68"; red = "f7768e";
               wallpaper = "mosaic-blue"; };
+    frappe = { bg = "303446"; bg1 = "292c3c"; bg2 = "414559"; bg3 = "51576d";
+              fg = "c6d0f5"; dim = "838ba7"; accent = "ca9ee6";
+              green = "a6d189"; yellow = "e5c890"; red = "e78284";
+              wallpaper = "catppuccin-frappe"; };
+    latte = { bg = "eff1f5"; bg1 = "e6e9ef"; bg2 = "ccd0da"; bg3 = "bcc0cc";
+              fg = "4c4f69"; dim = "8c8fa1"; accent = "8839ef";
+              green = "40a02b"; yellow = "df8e1d"; red = "d20f39";
+              wallpaper = "catppuccin-latte"; };
+    solarized = { bg = "002b36"; bg1 = "073642"; bg2 = "0e4b5a"; bg3 = "586e75";
+              fg = "93a1a1"; dim = "657b83"; accent = "2aa198";
+              green = "859900"; yellow = "b58900"; red = "dc322f";
+              wallpaper = "nineish-solarized-dark"; };
+    rosepine = { bg = "191724"; bg1 = "1f1d2e"; bg2 = "26233a"; bg3 = "403d52";
+              fg = "e0def4"; dim = "6e6a86"; accent = "c4a7e7";
+              green = "9ccfd8"; yellow = "f6c177"; red = "eb6f92";
+              wallpaper = "moonscape"; };
+    gruvbox = { bg = "282828"; bg1 = "3c3836"; bg2 = "504945"; bg3 = "665c54";
+              fg = "ebdbb2"; dim = "a89984"; accent = "fe8019";
+              green = "b8bb26"; yellow = "fabd2f"; red = "fb4934";
+              wallpaper = "binary-black"; };
+    everforest = { bg = "2d353b"; bg1 = "343f44"; bg2 = "3d484d"; bg3 = "475258";
+              fg = "d3c6aa"; dim = "859289"; accent = "a7c080";
+              green = "a7c080"; yellow = "dbbc7f"; red = "e67e80";
+              wallpaper = "nineish-dark-gray"; };
   };
 
   wallpaperOf = w:
@@ -477,8 +501,8 @@ let
     {
       "layer": "top",
       "position": "top",
-      "height": 30,
-      "spacing": 6,
+      "height": 20,
+      "spacing": 3,
       "modules-left": ["hyprland/workspaces", "hyprland/submap", "hyprland/window"],
       "modules-center": ["clock"],
       "modules-right": ["idle_inhibitor", "cpu", "memory", "temperature", "disk", "backlight", "pulseaudio", "mpris", "network", "bluetooth", "battery", "tray", "custom/power"],
@@ -526,28 +550,28 @@ let
         "states": { "warning": 30, "critical": 15 },
         "tooltip-format": "{timeTo}\n{power:>1.2f}W"
       },
-      "tray": { "spacing": 8, "icon-size": 16 },
+      "tray": { "spacing": 5, "icon-size": 14 },
       "custom/power": { "format": "\uf011", "tooltip": "Power", "on-click": "power-menu" }
     }
   '';
 
   waybarStyle = ''
-    * { font-family: "${font}"; font-size: 12px; border: none; border-radius: 0; min-height: 0; }
+    * { font-family: "${font}"; font-size: 10px; border: none; border-radius: 0; min-height: 0; }
     window#waybar { background: #${bg}; color: #${fg}; }
 
-    #workspaces button { padding: 0 7px; color: #${dim}; background: transparent; }
+    #workspaces button { padding: 0 5px; color: #${dim}; background: transparent; }
     #workspaces button.active { color: #${accent}; }
     #workspaces button:hover { background: #${bg1}; }
 
-    #window { color: #${dim}; padding: 0 10px; }
-    #submap { color: #${yellow}; padding: 0 10px; }
+    #window { color: #${dim}; padding: 0 7px; }
+    #submap { color: #${yellow}; padding: 0 7px; }
 
-    #clock { color: #${accent}; padding: 0 12px; }
-    #idle_inhibitor { padding: 0 8px; color: #${dim}; }
+    #clock { color: #${accent}; padding: 0 9px; }
+    #idle_inhibitor { padding: 0 5px; color: #${dim}; }
     #idle_inhibitor.activated { color: #${accent}; }
 
     #cpu, #memory, #temperature, #disk, #backlight, #pulseaudio, #mpris,
-    #network, #bluetooth, #battery, #tray { padding: 0 9px; color: #${fg}; }
+    #network, #bluetooth, #battery, #tray { padding: 0 6px; color: #${fg}; }
 
     #temperature.critical { color: #${red}; }
     #pulseaudio.muted { color: #${dim}; }
@@ -557,7 +581,7 @@ let
     #battery.charging { color: #${green}; }
     #battery.warning { color: #${yellow}; }
     #battery.critical { color: #${red}; }
-    #custom-power { color: #${accent}; padding: 0 10px; }
+    #custom-power { color: #${accent}; padding: 0 8px; }
   '';
 
   # -------------------------------------------------------------------------
