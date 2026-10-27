@@ -86,7 +86,6 @@ in
   imports = [
     ./hardware-configuration.nix
     ./hyprland.nix
-    ./caelestia.nix
     ./geforcenow.nix
     ./neovim.nix
   ];
@@ -229,10 +228,13 @@ in
     # These apps only read their config from ~/.config (Hyprland 0.55 even
     # generates a shadowing default there), so link the Nix-managed files in.
     # They start on the default theme; theme-switch re-points them at runtime.
+    "d /home/k/.config/hypr 0755 k users -"
     "d /home/k/.config/kitty 0755 k users -"
     "d /home/k/.config/rofi 0755 k users -"
     "d /home/k/.config/waybar 0755 k users -"
     "d /home/k/.config/qutebrowser 0755 k users -"
+    "L+ /home/k/.config/hypr/hyprland.lua   - - - - /etc/xdg/themes/slate/hyprland.lua"
+    "L+ /home/k/.config/hypr/hyprlock.conf  - - - - /etc/xdg/themes/slate/hyprlock.conf"
     "L+ /home/k/.config/kitty/kitty.conf    - - - - /etc/xdg/themes/slate/kitty.conf"
     "L+ /home/k/.config/rofi/config.rasi    - - - - /etc/xdg/themes/slate/rofi.rasi"
     "L+ /home/k/.config/waybar/style.css    - - - - /etc/xdg/themes/slate/waybar.css"
