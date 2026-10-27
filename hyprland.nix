@@ -107,7 +107,10 @@ let
     local browser  = "${browser}"
     local mainMod  = "SUPER"
 
-    hl.monitor({ output = "", mode = "preferred", position = "auto", scale = "auto" })
+    -- External (HDMI) is the origin; the built-in panel sits centered below it.
+    -- auto-center-down is relative, so it falls back to 0x0 when unplugged.
+    hl.monitor({ output = "HDMI-A-1", mode = "preferred", position = "0x0", scale = 1 })
+    hl.monitor({ output = "eDP-1",    mode = "preferred", position = "auto-center-down", scale = 1.5 })
 
     hl.env("XCURSOR_THEME",    "Adwaita")
     hl.env("XCURSOR_SIZE",     "24")
