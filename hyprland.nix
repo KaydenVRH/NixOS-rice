@@ -86,8 +86,15 @@ let
               wallpaper = "nineish-dark-gray"; };
   };
 
-  wallpaperOf = w:
-    "${pkgs.nixos-artwork.wallpapers.${w}}/share/wallpapers/${w}/contents/images/nix-wallpaper-${w}.png";
+  # The image filename is not uniform across the artwork packages (the
+  # catppuccin-* ones use nixos-wallpaper-*.png, the rest nix-wallpaper-*.png),
+  # so resolve it at build time instead of guessing.
+  wallpaperOf = w: pkgs.runCommandLocal "wallpaper-${w}" { } ''
+    for f in ${pkgs.nixos-artwork.wallpapers.${w}}/share/wallpapers/${w}/contents/images/*.png; do
+      ln -s "$f" "$out"
+      break
+    done
+  '';
 
   # replaceStrings scans the input once and never rescans its own output, so a
   # replacement value can never be replaced again.
